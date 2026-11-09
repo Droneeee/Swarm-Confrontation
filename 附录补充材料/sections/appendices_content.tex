@@ -1,0 +1,345 @@
+%% Supplementary appendices.
+\chapter{平台轨迹语义压缩方法}
+\label{app:platform-trajectory-compression}
+
+原始日志逐步记录平台位置与策略，直接输入会随决策间隔和平台数量增长，且难以表达机动或驻留状态。因此，系统提取当前周期样本，经滑动窗口判定、相邻样本合并和事件汇总，生成移动与区域驻留两类语义轨迹段。
+
+设相邻两次上层决策时刻为$t_{k-1}^{\mathrm H}$和$t_k^{\mathrm H}$。将平台$i$截至$t_k^{\mathrm H}$的原始日志按采样时刻升序排列，记为
+\begin{equation}
+    \mathcal T_{i,k}
+    =\left(
+    \left(t_l,\boldsymbol p_i^{t_l},\omega_i^{t_l}\right)
+    \right)_{l=1}^{L_{i,k}},
+    \qquad
+    t_1<t_2<\cdots<t_{L_{i,k}}\leq t_k^{\mathrm H},
+    \label{eq:appendix-trajectory-samples}
+\end{equation}
+其中，$L_{i,k}$为样本数，$t_l$、$\boldsymbol p_i^{t_l}$和$\omega_i^{t_l}$分别为时刻、位置和任务标签。本周期仅输出$t_l\in(t_{k-1}^{\mathrm H},t_k^{\mathrm H}]$的样本；长度不超过$W_{\mathrm{win}}$的判定窗口可调用此前最近样本，但这些历史样本不进入输出。
+
+以第$l$个样本结尾，取$n_{i,l}=\min(W_{\mathrm{win}},l)$个样本并划分为前、后半窗$\mathcal W_{i,l}^{\mathrm{old}}$与$\mathcal W_{i,l}^{\mathrm{new}}$，其大小分别为$\lfloor n_{i,l}/2\rfloor$和$n_{i,l}-\lfloor n_{i,l}/2\rfloor$；不足两个样本时保持上一状态。两半窗中心为
+\begin{equation}
+    \bar{\boldsymbol p}_{i,l}^{q}
+    =\frac{1}{|\mathcal W_{i,l}^{q}|}
+    \sum_{h\in\mathcal W_{i,l}^{q}}\boldsymbol p_i^{t_h},
+    \qquad q\in\{\mathrm{old},\mathrm{new}\}.
+    \label{eq:appendix-window-centers}
+\end{equation}
+以前后半窗中心的欧氏距离衡量窗口内活动中心的平移量：
+\begin{equation}
+    d_{i,l}=\left\|
+    \bar{\boldsymbol p}_{i,l}^{\mathrm{new}}
+    -\bar{\boldsymbol p}_{i,l}^{\mathrm{old}}
+    \right\|_2.
+    \label{eq:appendix-center-shift}
+\end{equation}
+$d_{i,l}$衡量活动中心迁移而非瞬时速度，因此围绕固定区域盘旋也可判为驻留。
+
+为避免$d_{i,l}$在单一阈值附近波动造成运动状态频繁切换，设置驻留进入阈值$\delta_i^{\mathrm{in}}$和驻留离开阈值$\delta_i^{\mathrm{out}}$，并满足$\delta_i^{\mathrm{in}}<\delta_i^{\mathrm{out}}$。令$m_{i,l}\in\{\mathrm{stay},\mathrm{move}\}$为第$l$个样本对应的运动状态，则滞回更新规则为
+\begin{equation}
+    m_{i,l}=\begin{cases}
+        \mathrm{move},
+        &m_{i,l-1}=\mathrm{stay}\ \land\
+        d_{i,l}>\delta_i^{\mathrm{out}},\\
+        \mathrm{stay},
+        &m_{i,l-1}=\mathrm{move}\ \land\
+        d_{i,l}\leq\delta_i^{\mathrm{in}},\\
+        m_{i,l-1}, &\text{其他情况}.
+    \end{cases}
+    \label{eq:appendix-hysteresis-classification}
+\end{equation}
+最早样本初始化为$\mathrm{stay}$，后续按式~\eqref{eq:appendix-hysteresis-classification}递推；艇机采用不同阈值，以适应速度和活动半径差异。
+
+分类后，将本周期内运动状态$m_{i,l}$与任务标签$\omega_i^{t_l}$均相同的相邻样本合并。设第$s$段的连续索引集合为$\mathcal L_{i,s}$，首尾索引为
+\begin{equation*}
+    l_{i,s}^{\mathrm{from}}=\min\mathcal L_{i,s},
+    \qquad
+    l_{i,s}^{\mathrm{to}}=\max\mathcal L_{i,s}.
+\end{equation*}
+记起止时刻为$t_{i,s}^{\mathrm{from}}$、$t_{i,s}^{\mathrm{to}}$，位置为$\boldsymbol p_{i,s}^{\mathrm{from}}$、$\boldsymbol p_{i,s}^{\mathrm{to}}$，统一任务标签为$\omega_{i,s}$。移动段保留这些边界量与样本数：
+\begin{equation}
+    \mathcal S_{i,s}^{\mathrm{move}}
+    =\left(t_{i,s}^{\mathrm{from}},t_{i,s}^{\mathrm{to}},
+    \boldsymbol p_{i,s}^{\mathrm{from}},\boldsymbol p_{i,s}^{\mathrm{to}},
+    \omega_{i,s},|\mathcal L_{i,s}|\right).
+    \label{eq:appendix-moving-segment}
+\end{equation}
+对于驻留段，以段内平均位置和活动半径代替全部位置点：
+\begin{equation}
+    \begin{aligned}
+    \bar{\boldsymbol p}_{i,s}
+    &=\frac{1}{|\mathcal L_{i,s}|}
+      \sum_{l\in\mathcal L_{i,s}}\boldsymbol p_i^{t_l},\\
+    \rho_{i,s}
+    &=\max_{l\in\mathcal L_{i,s}}
+      \left\|\boldsymbol p_i^{t_l}-\bar{\boldsymbol p}_{i,s}\right\|_2,\\
+    \mathcal S_{i,s}^{\mathrm{stay}}
+    &=\left(t_{i,s}^{\mathrm{from}},t_{i,s}^{\mathrm{to}},
+      \bar{\boldsymbol p}_{i,s},\rho_{i,s},
+      \omega_{i,s},|\mathcal L_{i,s}|\right).
+    \end{aligned}
+    \label{eq:appendix-stay-segment}
+\end{equation}
+其中，$\rho_{i,s}$为驻留活动半径；任务标签变化时即使运动状态不变也切分轨迹段。图~\ref{fig:appendix-trajectory-compression}给出压缩示例。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.96\textwidth]{\detokenize{轨迹压缩.png}}
+    \caption{平台原始轨迹的语义压缩示意图}
+    \label{fig:appendix-trajectory-compression}
+\end{figure}
+
+系统同时提取区间$(t_{k-1}^{\mathrm H},t_k^{\mathrm H}]$内的发射、发现、毁伤和失效事件及其时刻、平台与目标关系。最终输出包含$t_k^{\mathrm H}$的状态快照、语义轨迹段和增量事件，避免重复位置占用上下文。
+
+\chapter{上层指挥决策器提示词模板}
+\label{app:llm-prompt-templates}
+
+本附录列出五类大模型节点的提示词。$\langle \dot \rangle$由第$k$次上层决策的状态填充，集合、平台状态和事件均序列化为结构化文本；$\boldsymbol\zeta_{j,k}$表示第$j$个威胁中心。
+
+\section{威胁位置推断提示词}
+
+该模板用于已观测展开集群成员但核心位置未知的情况。
+
+\begin{quote}\small
+\textbf{系统指令：}你是敌方集群核心位置推断专家。无人艇承担核心和主要火力载荷，无人机围绕其协同。仅依据已观测成员位置、类型、集群状态和编组知识推断核心；不得虚构平台或将初始情报当作当前位置。只输出结构化对象。
+
+\textbf{动态输入：}当前待推断威胁中心编号为$\langle j\rangle$，集群状态为$\langle\text{集群状态}\rangle$；已观测成员为$\langle\mathcal M_{j,k}^{\mathrm{obs}}\rangle$，每个成员包含平台编号、平台类型和当前位置；已知敌方编组规律为$\langle\text{敌方艇机编组知识}\rangle$。请估计集群核心位置。
+
+\textbf{输出格式：}\{``position'':[$x$,$y$]\}。
+\end{quote}
+
+输出缺少有效二维坐标或调用失败时，程序以已观测成员的几何中心作为$\widehat{\boldsymbol p}_{j,k}^{\mathrm{core}}$。
+
+\section{态势总结提示词}
+
+该模板从结构化上层状态中识别需调整任务分配的情况。
+
+\begin{quote}\small
+\textbf{系统指令：}你是战场态势分析专家。你只能依据输入事实和给定知识进行判断，不得虚构距离、平台身份、因果关系或持续时间；证据不足时必须写“证据不足”，不得将可能性表述为已经发生的事实。
+
+平台状态、压缩轨迹、事件、分组、威胁中心、当前数量和程序信号均为权威事实。威胁中心是推断记录而非环境真值，置信度达阈值仅表示可用于规划；紧急防守信号为真时必须增加阵位防守力量。
+
+请逐项判断以下五种情况：
+
+1. 未探明威胁数量大于当前执行覆盖搜索任务的无人机数量，是否需要增加侦察力量；
+
+2. 是否出现新探明且尚未展开的威胁，并且需要增加主动拦截力量；
+
+3. 敌方是否进入友方外沿且保护中心内侧防守力量不足；
+
+4. 原主动拦截编组是否已完成攻击任务，需要转入防守或其他拦截任务；
+
+5. 存活侦察平台是否完成了某一威胁的确认任务，可以减少覆盖搜索力量；
+
+状态仅可为“成立”“不成立”或“证据不足”；成立时给出对应措施。依据须可追溯至输入，不得增设判断标准。只输出结构化对象。
+
+\textbf{动态输入：}战场知识为$\langle\text{战场背景与敌方编组知识}\rangle$；任务知识为$\langle\text{三类任务定义}\rangle$；情况判据为$\langle\text{任务调整判据}\rangle$；结构化事实为$\langle\boldsymbol s_k^{\mathrm H}\rangle$。
+
+\textbf{输出格式：}
+\{``judgments'':[\{``situation'':编号，``status'':``成立$|$不成立$|$证据不足''，``judgment'':``情况判断''，``evidence'':[``直接事实依据'']\}]，``solutions'':[\{``situation'':编号，``measure'':``对应措施''\}]\}。
+\end{quote}
+
+核查未通过时追加上一版草案与核查问题，要求仅作最小修正，不引入新判断。
+
+\section{事实核查提示词}
+
+该节点仅核查事实，不重新决策。
+
+\begin{quote}\small
+\textbf{系统指令：}你是有限权限的事实核查员，仅识别会改变成立状态或措施的硬错误，不进行战术规划。
+
+仅报告两类问题：草案中的平台编号、数量、状态、事件或位置与原始事实矛盾；成立状态或措施违反显式判据。每项须给出事实位置、决策影响和最小修正。
+
+不得新增占用关系、部署或拦截要求、阈值和评价维度，也不得因措辞、其他解释或保守偏好判定失败。若无影响决策的问题，判定通过且问题列表为空；只输出核查结果。
+
+\textbf{动态输入：}事实字段定义为$\langle\text{字段语义}\rangle$；任务调整判据为$\langle\text{显式判据}\rangle$；原始结构化事实为$\langle\boldsymbol s_k^{\mathrm H}\rangle$；待核查的态势总结草案为$\langle\text{总结草案}\rangle$。
+
+\textbf{输出格式：}
+\{``passed'':真或假，``issues'':[\{``situation'':编号，``type'':``事实矛盾或规则违反''，``fact\_paths'':[``原始事实位置'']，``decision\_impact'':真或假，``problem'':``问题说明''，``required\_revision'':``最小修正''\}]\}。
+\end{quote}
+
+核查未通过时仅允许总结节点修正一次；输出无法解析则保留原草案并记录异常。
+
+\section{结论封装提示词}
+
+该节点将已核查内容压缩为资源规划所需信息，不新增判断。
+
+\begin{quote}\small
+\textbf{系统指令：}你是态势结论编辑。保留资源规划所需的成立情况、关键数量、威胁中心编号、依据和措施，删除重复及无关推理；不得新增事实。证据不足时保守表述，不得把推测写成事实；仅保留成立情况对应的措施，无情况成立则保持当前分配。只输出结构化对象。
+
+\textbf{动态输入：}修正后的态势总结为$\langle\text{总结草案}\rangle$；最新事实核查结果为$\langle\text{核查结果}\rangle$。
+
+\textbf{输出格式：}\{``condition'':``精简后的情况''，``evidence'':``支持判断的关键事实''，``solution'':``对应措施''\}。
+\end{quote}
+
+\section{资源规划提示词}
+
+该节点只确定三类任务的资源数量与拦截对象，不绑定平台编号。
+
+\begin{quote}\small
+\textbf{系统指令：}你是无人集群资源规划专家。依据上一节点的情况、依据和措施，调整三类任务的平台数量并选择主动拦截中心。
+
+必须遵守以下约束：三类任务的平台数量均为非负整数，且数量之和等于当前可用平台总数；覆盖搜索任务只能使用无人机，其数量不得超过可用无人机数量；主动拦截数量大于零时，必须存在可处置的高置信度威胁中心，并满足给定的无人艇—无人机编成比例；无可处置威胁时，主动拦截数量必须为零；紧急防守信号为真时，优先增加阵位防守数量；拦截对象只能从输入给出的候选威胁中心中选择。
+
+结构化数量、候选中心和安全信号为权威事实，与自然语言结论冲突时以前者为准。不得指定平台编号；调整摘要用一句话说明变化方向。只输出结构化对象。
+
+\textbf{动态输入：}上一节点结论为$\langle\text{情况、依据与措施}\rangle$；可用平台数量为$\langle N_k^{\mathrm U},N_k^{\mathrm S}\rangle$；当前任务数量为$\langle\text{三类任务当前数量}\rangle$；威胁态势为$\langle\mathcal C_k\rangle$；候选拦截对象为$\langle\text{达到置信度阈值且仍有效的威胁中心}\rangle$；任务触发原因和安全约束为$\langle\text{触发信号与编成约束}\rangle$。
+
+\textbf{输出格式：}
+\{``task\_counts'':\{``recon'':整数，``attack'':整数，``defend'':整数\}，``attack\_targets'':[威胁中心编号]，``adjustment'':``任务数量调整摘要''\}。
+\end{quote}
+
+程序校验数量守恒、平台资格、目标有效性和艇机比例。首次失败时追加原结果与违反约束，要求保持战术意图并仅修正违规项；再次失败则启用确定性规则。
+
+\section{任务绑定节点规则}
+\label{app:task-binding-rules}
+
+任务绑定节点将资源数量和主动拦截对象确定性转换为平台级联合动作。设可用平台及无人机集合分别为$\mathcal N_k$和$\mathcal N_k^{\mathrm U}$，资源规划结果为
+\begin{equation}
+    \boldsymbol n_k^{\mathrm{task}}
+    =\left(n_k^{\mathrm{rec}},n_k^{\mathrm{atk}},n_k^{\mathrm{def}}\right),
+    \qquad
+    n_k^{\mathrm{rec}}+n_k^{\mathrm{atk}}+n_k^{\mathrm{def}}
+    =|\mathcal N_k|,
+    \label{eq:appendix-binding-task-counts}
+\end{equation}
+以$\mathcal C_k^{\mathrm{atk}}\subseteq\mathcal C_k$表示拦截对象。平台选择优先保持上一周期策略，再按到相关威胁中心的距离和编号排序。定义
+\begin{equation}
+    \delta_{i,k}^{q}=\begin{cases}
+        0,&\omega_{i,k-1}=\omega^q,\\
+        1,&\omega_{i,k-1}\neq\omega^q,
+    \end{cases}
+    \qquad q\in\{\mathrm{rec},\mathrm{atk}\},
+    \label{eq:appendix-binding-continuity}
+\end{equation}
+$d_{i,k}^{\mathrm{rec}}$和$d_{i,k}^{\mathrm{atk}}$分别为平台$i$到最近低置信度中心和指定拦截中心的距离。按$(\delta_{i,k}^{q},d_{i,k}^{q},i)$升序排列，可依次保证策略连续性、距离和编号优先级。
+
+主动拦截编组中无人机和无人艇的数量分别记为$n_k^{\mathrm{A,U}}$和$n_k^{\mathrm{A,S}}$。在资源允许时，编组满足
+\begin{equation}
+    n_k^{\mathrm{A,U}}+n_k^{\mathrm{A,S}}=n_k^{\mathrm{atk}},
+    \qquad
+    2n_k^{\mathrm{A,S}}\leq n_k^{\mathrm{A,U}}
+    \leq3n_k^{\mathrm{A,S}},
+    \label{eq:appendix-binding-attack-ratio}
+\end{equation}
+即每艘火力核心无人艇配置$2$至$3$架无人机，优先接近$2{:}1$；资源不足以合法编组时直接采用安全兜底。完整过程见算法~\ref{alg:upper-task-binding}。
+
+\begin{algorithm}[!htbp]
+\caption{上层任务绑定与安全校验}
+\label{alg:upper-task-binding}
+\small
+\begin{algorithmic}[1]
+\Require 可用平台$\mathcal N_k$及其类型、位置和上一周期任务；任务数量$\boldsymbol n_k^{\mathrm{task}}$；主动拦截对象$\mathcal C_k^{\mathrm{atk}}$；威胁中心集合$\mathcal C_k$
+\Ensure 平台级联合任务$\boldsymbol\omega_k$及三类任务平台集合$\mathcal I_{\mathrm{rec},k}$、$\mathcal I_{\mathrm{atk},k}$和$\mathcal I_{\mathrm{def},k}$
+\State 初始化三个任务平台集合为空集
+\If{任务数量不满足式~\eqref{eq:appendix-binding-task-counts}，或$n_k^{\mathrm{rec}}>|\mathcal N_k^{\mathrm U}|$}
+    \State 将全部平台分配至$\mathcal I_{\mathrm{def},k}$，并返回安全防守任务
+\EndIf
+\If{$n_k^{\mathrm{atk}}>0$且$\mathcal C_k^{\mathrm{atk}}$为空，或集合中存在无效威胁中心}
+    \State 将全部平台分配至$\mathcal I_{\mathrm{def},k}$，并返回安全防守任务
+\EndIf
+\State 按$(\delta_{i,k}^{\mathrm{rec}},d_{i,k}^{\mathrm{rec}},i)$升序排列$\mathcal N_k^{\mathrm U}$
+\State 取前$n_k^{\mathrm{rec}}$个平台构成$\mathcal I_{\mathrm{rec},k}$
+\State $\mathcal N_k^{\mathrm{rem}}\gets\mathcal N_k\setminus\mathcal I_{\mathrm{rec},k}$
+\State 枚举满足式~\eqref{eq:appendix-binding-attack-ratio}且不超过$\mathcal N_k^{\mathrm{rem}}$艇机资源的可行编成集合$\mathcal F_k$
+\If{$n_k^{\mathrm{atk}}>0$且$\mathcal F_k=\varnothing$}
+    \State 将全部平台分配至$\mathcal I_{\mathrm{def},k}$，并返回安全防守任务
+\EndIf
+\If{$n_k^{\mathrm{atk}}>0$}
+    \State 从$\mathcal F_k$中选取最接近$2{:}1$且保留较多无人艇火力核心的编成$(n_k^{\mathrm{A,U}},n_k^{\mathrm{A,S}})$
+    \State 分别按$(\delta_{i,k}^{\mathrm{atk}},d_{i,k}^{\mathrm{atk}},i)$升序排列剩余无人机与无人艇
+    \State 选择前$n_k^{\mathrm{A,U}}$架无人机和前$n_k^{\mathrm{A,S}}$艘无人艇构成$\mathcal I_{\mathrm{atk},k}$
+\EndIf
+\State $\mathcal I_{\mathrm{def},k}\gets\mathcal N_k\setminus(\mathcal I_{\mathrm{rec},k}\cup\mathcal I_{\mathrm{atk},k})$
+\State 根据三个平台集合生成$\boldsymbol\omega_k$，并附加主动拦截对象$\mathcal C_k^{\mathrm{atk}}$
+\State 检查平台可用性、分配唯一性、分配完备性、任务数量、平台资格、目标有效性和艇机编成
+\If{任一检查未通过}
+    \State $\mathcal I_{\mathrm{rec},k},\mathcal I_{\mathrm{atk},k}\gets\varnothing$，$\mathcal I_{\mathrm{def},k}\gets\mathcal N_k$
+    \State 生成全员阵位防守的安全任务$\boldsymbol\omega_k$
+\EndIf
+\State \Return $\boldsymbol\omega_k$，$\mathcal I_{\mathrm{rec},k}$，$\mathcal I_{\mathrm{atk},k}$，$\mathcal I_{\mathrm{def},k}$
+\end{algorithmic}
+\end{algorithm}
+
+该顺序保证覆盖搜索资格和主动拦截编成约束；三个集合须两两不交、并集为$\mathcal N_k$且规模符合规划，否则执行全员阵位防守。
+
+\begingroup
+\let\clearpage\relax
+\chapter{覆盖搜索热点方向补偿方法}
+\label{app:search-hotspot-compensation}
+\endgroup
+
+当无人机进入已充分搜索或低概率区域时，八个方向的新增熵减均可能接近零，局部信息增益无法提供脱离方向。热点补偿仅在此类低信息区域提供辅助引导。
+
+对于无人机$i$的候选动作$a$，以动作后探测范围相对于当前位置探测范围新增的网格集合为$\Delta\mathcal B_i^t(a)$，对应的潜在新增信息量为
+\begin{equation}
+    I_i^t(a)=
+    \sum_{(x_{\mathrm g},y_{\mathrm g})\in\Delta\mathcal B_i^t(a)}
+    H_{x_{\mathrm g},y_{\mathrm g}}^t.
+    \label{eq:rec-potential-new-information}
+\end{equation}
+若八个方向的$I_i^t(a)$均低于阈值，则提取概率图中的高概率网格，经连通域合并并滤除小面积区域。有效热点$\mathcal V_m^{\mathrm{hot}}$的概率加权中心为
+\begin{equation}
+    \boldsymbol c_m^t=
+    \frac{
+    \displaystyle
+    \sum_{(x_{\mathrm g},y_{\mathrm g})\in\mathcal V_m^{\mathrm{hot}}}
+    p_{x_{\mathrm g},y_{\mathrm g}}^t
+    \boldsymbol c_{x_{\mathrm g},y_{\mathrm g}}}
+    {
+    \displaystyle
+    \sum_{(x_{\mathrm g},y_{\mathrm g})\in\mathcal V_m^{\mathrm{hot}}}
+    p_{x_{\mathrm g},y_{\mathrm g}}^t},
+    \label{eq:rec-hotspot-center}
+\end{equation}
+选择最近的热点中心作为补偿目标$\boldsymbol c_i^{t,*}$，其几何关系见图~\ref{fig:rec-hotspot-center-angle}。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{热点区域中心示意图.png}
+    \caption{热点连通域、概率加权中心与方向夹角示意}
+    \label{fig:rec-hotspot-center-angle}
+\end{figure}
+
+信息阈值、高概率分割阈值和最小连通域面积分别用于判定低信息状态、提取热点和滤除噪声。
+
+令无人机依据动作$a_i^t$形成的移动向量为
+\begin{equation}
+    \boldsymbol v_{i,\mathrm a}^t
+    =\boldsymbol p_i^{t,\mathrm{next}}-\boldsymbol p_i^t,
+\end{equation}
+由当前位置指向热点中心的参考向量为
+\begin{equation}
+    \boldsymbol v_{i,\mathrm h}^t
+    =\boldsymbol c_i^{t,*}-\boldsymbol p_i^t.
+\end{equation}
+两者夹角为
+\begin{equation}
+    \theta_{i,\mathrm{hot}}^t
+    =
+    \arccos
+    \left(
+    \frac{
+    (\boldsymbol v_{i,\mathrm a}^t)^{\mathrm T}
+    \boldsymbol v_{i,\mathrm h}^t}
+    {
+    \|\boldsymbol v_{i,\mathrm a}^t\|_2
+    \|\boldsymbol v_{i,\mathrm h}^t\|_2}
+    \right).
+    \label{eq:rec-hotspot-angle}
+\end{equation}
+热点方向补偿奖励定义为
+\begin{equation}
+    r_{i,\mathrm{hot}}^t
+    =
+    \lambda_{\mathrm{hot}}
+    \operatorname{clip}
+    \left(
+    \frac{\pi}{2}-\theta_{i,\mathrm{hot}}^t,
+    -\frac{\pi}{2},
+    \frac{\pi}{2}
+    \right),
+    \label{eq:rec-hotspot-direction-reward}
+\end{equation}
+其中$\lambda_{\mathrm{hot}}>0$。朝向、垂直和背离热点分别获得正、零和负奖励；低信息状态持续时保持目标以抑制振荡，恢复有效信息增益后停止补偿，不改变熵减奖励的主体地位。
+
+\input{sections/raw_data_tables.tex}

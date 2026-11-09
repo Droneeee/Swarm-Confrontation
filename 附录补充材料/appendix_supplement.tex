@@ -1,0 +1,76 @@
+\documentclass[UTF8,oneside,12pt]{ctexbook}
+
+\usepackage[a4paper,top=2.7cm,bottom=2.7cm,left=3.0cm,right=2.6cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{adjustbox}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{rotating}
+\usepackage{caption}
+\usepackage{setspace}
+\usepackage{xcolor}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+
+\floatname{algorithm}{算法}
+\graphicspath{{figures/}}
+
+\ctexset{
+  chapter = {
+    format = \centering\heiti\zihao{3},
+    name = {附录,},
+    number = \Alph{chapter},
+    beforeskip = 12pt,
+    afterskip = 24pt,
+  },
+  section = {
+    format = \heiti\zihao{4},
+  },
+}
+
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.75}
+\setlength{\emergencystretch}{2em}
+\hypersetup{
+  pdftitle={海上异构无人集群对抗防御决策研究——补充材料},
+  pdfauthor={蒋宗宏},
+  pdfsubject={学位论文在线补充材料},
+}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{3.0cm}
+  {\heiti\zihao{1} 海上异构无人集群对抗防御决策研究\par}
+  \vspace{1.2cm}
+  {\heiti\zihao{2} 补充材料\par}
+  \vspace{2.5cm}
+  {\zihao{3} 作者：蒋宗宏\par}
+  \vfill
+  {\zihao{-4} 本文档收录从学位论文正文中移出的技术细节、提示词模板、实验策略说明与原始数据附表。\par}
+  \vspace{0.8cm}
+  {\zihao{-4} 2026年11月\par}
+\end{titlepage}
+
+\frontmatter
+\chapter*{文档说明}
+\addcontentsline{toc}{chapter}{文档说明}
+本补充材料与学位论文《海上异构无人集群对抗防御决策研究》配套使用，收录平台轨迹语义压缩方法、上层指挥决策器提示词模板、覆盖搜索热点方向补偿方法，以及第三至第五章主要实验的原始数据附表。为保证文档能够独立编译，原先指向论文正文的交叉引用已改写为自包含说明；研究内容与数据本身未作扩展。
+
+\tableofcontents
+
+\mainmatter
+\appendix
+\input{sections/appendices_content.tex}
+
+\end{document}
